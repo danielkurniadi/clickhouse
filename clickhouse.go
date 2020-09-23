@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	goversion "github.com/hashicorp/go-version"
+	"github.com/hashicorp/go-version"
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
 	"gorm.io/gorm/clause"
@@ -60,15 +60,16 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 			return err
 		}
 	}
-	var version string
-	err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&version)
+	var vs string
+	err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&vs)
 	if err != nil {
 		return err
 	}
-	currv, _ := goversion.NewVersion(version)
-	if v, _ := goversion.NewVersion("20.4"); currv.LessThan(v) {
-		dialector.DontSupportRenameColumn = true
-		dialector.DontSupportRenameIndex = true
+	dbversion, _ := version.NewVersion(vs)
+	versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
+
+	if versionNoRenameColumn.Check(dbversion) {
+		dialector.Config.DontSupportRenameColumn = true
 	}
 	return
 }
