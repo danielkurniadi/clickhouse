@@ -70,3 +70,50 @@ func (m Migrator) RenameColumn(value interface{}, oldName, newName string) error
 			"failed to rename column. renaming column is disabled or isn't supported")
 	})
 }
+
+// Table Index: https://clickhouse.tech/docs/en/sql-reference/statements/alter/index/
+func (m Migrator) BuildIndexOptions(opts []schema.IndexOption, stmt *gorm.Statement) (results []interface{}) {
+	// TODO (iqdf): // type value name
+	for _, opt := range opts {
+		str := stmt.Quote(opt.DBName)
+		if opt.Expression != "" {
+			str = opt.Expression
+		}
+		results = append(results, clause.Expr{SQL: str})
+	}
+	return
+}
+
+// Table Index: https://clickhouse.tech/docs/en/sql-reference/statements/alter/index/
+func (m Migrator) CreateIndex(value interface{}, name string) error {
+	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		if idx := stmt.Schema.LookIndex(name); idx != nil {
+			opts := m.BuildIndexOptions(idx.Fields, stmt)
+			values := []interface{}{
+				clause.Table{Name: stmt.Table},
+				clause.Column{Name: idx.Name},
+				opts,
+			}
+
+			// NOTE: concept of UNIQUE | FULLTEXT | SPATIAL index
+			// is not supported in clickhouse
+			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d" // TODO (iqdf) how to inject Granularity
+			createIndexSQL = fmt.Sprintf(createIndexSQL, idx.Type, 0)              // Granularity: 0
+			return m.DB.Exec(createIndexSQL, values...).Error
+		}
+		return fmt.Errorf("failed to create index with name %v", name)
+	})
+}
+
+func (m Migrator) RenameIndex(value interface{}, oldName, newName string) error {
+	return fmt.Errorf("renaming index is not supported in clickhouse")
+}
+
+func (m Migrator) DropIndex(value interface{}, name string) error {
+	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		if idx := stmt.Schema.LookIndex(name); idx != nil {
+			name = idx.Name
+		}
+		return m.DB.Exec("DROP INDEX ?", clause.Column{Name: name}).Error
+	})
+}
