@@ -13,6 +13,8 @@ import (
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
+
+	_ "github.com/ClickHouse/clickhouse-go"
 )
 
 type Config struct {
@@ -20,7 +22,6 @@ type Config struct {
 	DSN                      string
 	Conn                     gorm.ConnPool
 	DisableDatetimePrecision bool
-	DontSupportRenameIndex   bool
 	DontSupportRenameColumn  bool
 }
 
@@ -120,6 +121,7 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 	case schema.Bytes:
 		return "String"
 	case schema.Time:
+		// TODO: support TimeZone
 		precision := ""
 		if !dialector.DisableDatetimePrecision {
 			if field.Precision == 0 {
@@ -129,10 +131,7 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 				precision = fmt.Sprintf("(%d)", field.Precision)
 			}
 		}
-		if field.NotNull || field.PrimaryKey {
-			return "DateTime" + precision
-		}
-		return "DateTime" + precision
+		return "DateTime64" + precision
 	}
 	return string(field.DataType)
 }
