@@ -13,6 +13,8 @@ import (
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
+
+	_ "github.com/ClickHouse/clickhouse-go"
 )
 
 type Config struct {
@@ -20,7 +22,6 @@ type Config struct {
 	DSN                      string
 	Conn                     gorm.ConnPool
 	DisableDatetimePrecision bool
-	DontSupportRenameIndex   bool
 	DontSupportRenameColumn  bool
 }
 
