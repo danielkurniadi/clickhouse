@@ -142,6 +142,9 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 
 			// Step 4. Finally assemble CREATE TABLE ... SQL string
 			engineOpts := DefaultTableEngineOpts
+			if tableOption, ok := m.DB.Get("gorm:table_options"); ok {
+				engineOpts = fmt.Sprint(tableOption)
+			}
 			createTableSQL = fmt.Sprintf(createTableSQL, columnStr, constrStr, indexStr, engineOpts)
 
 			fmt.Println("Exec Create Table:", createTableSQL)
