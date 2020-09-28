@@ -18,11 +18,12 @@ import (
 )
 
 type Config struct {
-	DriverName               string
-	DSN                      string
-	Conn                     gorm.ConnPool
-	DisableDatetimePrecision bool
-	DontSupportRenameColumn  bool
+	DriverName                string
+	DSN                       string
+	Conn                      gorm.ConnPool
+	DisableDatetimePrecision  bool
+	DontSupportRenameColumn   bool
+	SkipInitializeWithVersion bool
 }
 
 type Dialector struct {
