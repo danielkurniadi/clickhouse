@@ -13,8 +13,9 @@ import (
 
 // Default values for any SQL options
 const (
-	DefaultIndexType   = "minmax" // index stores extremes of the expression
-	DefaultGranularity = 1        // 1 granule = 8192 rows
+	DefaultGranularity     = 1        // 1 granule = 8192 rows
+	DefaultIndexType       = "minmax" // index stores extremes of the expression
+	DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
 )
 
 // Errors enumeration
@@ -36,11 +37,30 @@ func (m Migrator) CurrentDatabase() (name string) {
 	return
 }
 
-func (m Migrator) FullDataTypeOf(field *schema.Field) clause.Expr {
-	expr := m.Migrator.FullDataTypeOf(field)
-	if value, ok := field.TagSettings["COMMENT"]; ok {
-		expr.SQL += "COMMENT" + m.Dialector.Explain("?", value)
+func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
+	expr.SQL = m.Migrator.DataTypeOf(field)
+
+	// NULL and UNIQUE keyword is not supported in clickhouse.
+	// Hence, skipping checks for field.Unique and field.NotNull
+
+	// Build DEFAULT clause after DataTypeOf() expression.
+	if field.HasDefaultValue && (field.DefaultValueInterface != nil || field.DefaultValue != "") {
+		if field.DefaultValueInterface != nil {
+			defaultStmt := &gorm.Statement{Vars: []interface{}{field.DefaultValueInterface}}
+			m.Dialector.BindVarTo(defaultStmt, defaultStmt, field.DefaultValueInterface)
+			expr.SQL += " DEFAULT " + m.Dialector.Explain(defaultStmt.SQL.String(), field.DefaultValueInterface)
+		} else if field.DefaultValue != "(-)" {
+			expr.SQL += " DEFAULT " + field.DefaultValue
+		}
 	}
+
+	// Build COMMENT clause after DEFAULT
+	if value, ok := field.TagSettings["COMMENT"]; ok {
+		expr.SQL += " COMMENT " + m.Dialector.Explain("?", value)
+	}
+
+	// TODO (iqdf) build CODEC and TTL clause
+
 	return expr
 }
 
@@ -51,7 +71,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 		tx := m.DB.Session(new(gorm.Session))
 		if err := m.RunWithValue(model, func(stmt *gorm.Statement) (err error) {
 			var (
-				createTableSQL = "CREATE TABLE ? (%s %s, %s) ENGINE=%s"
+				createTableSQL = "CREATE TABLE ? (%s %s %s) %s"
 				args           = []interface{}{clause.Table{Name: stmt.Table}}
 			)
 
@@ -62,7 +82,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				columnSlice = append(columnSlice, "? ?")
 				args = append(args,
 					clause.Column{Name: dbName},
-					m.DB.Migrator().FullDataTypeOf(field),
+					m.FullDataTypeOf(field),
 				)
 			}
 			columnStr := strings.Join(columnSlice, ",")
@@ -77,9 +97,12 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				)
 			}
 			constrStr := strings.Join(constrSlice, ",")
+			if len(constrSlice) > 0 {
+				constrStr = ", " + constrStr
+			}
 
 			// Step 3. Build index SQL string
-			// NOTE: index class [UNIQUE | FULLTEXT | SPATIAL] is NOT supported!
+			// NOTE: clickhouse does not support for index class.
 			indexSlice := make([]string, 0, 10)
 			for _, index := range stmt.Schema.ParseIndexes() {
 				if m.CreateIndexAfterCreateTable {
@@ -90,7 +113,6 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 					}(model, index.Name)
 					continue
 				}
-
 				// TODO(iqdf): support primary key by put it as pass the fieldname
 				// as MergeTree(...) parameters. But somehow it complained.
 				// Note that primary key doesn't ensure uniqueness
@@ -114,10 +136,18 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				args = append(args, clause.Expr{SQL: index.Name}, indexOptions)
 			}
 			indexStr := strings.Join(indexSlice, ", ")
+			if len(indexSlice) > 0 {
+				indexStr = ", " + indexStr
+			}
 
 			// Step 4. Finally assemble CREATE TABLE ... SQL string
-			engineOpts := "MergeTree() ORDER BY tuple()"
+			engineOpts := DefaultTableEngineOpts
+			if tableOption, ok := m.DB.Get("gorm:table_options"); ok {
+				engineOpts = fmt.Sprint(tableOption)
+			}
 			createTableSQL = fmt.Sprintf(createTableSQL, columnStr, constrStr, indexStr, engineOpts)
+
+			fmt.Println("Exec Create Table:", createTableSQL)
 			err = tx.Exec(createTableSQL, args...).Error
 
 			return
@@ -142,6 +172,18 @@ func (m Migrator) HasTable(value interface{}) bool {
 }
 
 // Columns
+
+func (m Migrator) AddColumn(value interface{}, field string) error {
+	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		if field := stmt.Schema.LookUpField(field); field != nil {
+			return m.DB.Exec(
+				"ALTER TABLE ? ADD COLUMN ? ?",
+				clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName}, m.DB.Migrator().FullDataTypeOf(field),
+			).Error
+		}
+		return fmt.Errorf("failed to look up field with name: %s", field)
+	})
+}
 
 func (m Migrator) AlterColumn(value interface{}, field string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {

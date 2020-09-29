@@ -18,11 +18,12 @@ import (
 )
 
 type Config struct {
-	DriverName               string
-	DSN                      string
-	Conn                     gorm.ConnPool
-	DisableDatetimePrecision bool
-	DontSupportRenameColumn  bool
+	DriverName                string
+	DSN                       string
+	Conn                      gorm.ConnPool
+	DisableDatetimePrecision  bool
+	DontSupportRenameColumn   bool
+	AutoInitializeWithVersion bool
 }
 
 type Dialector struct {
@@ -161,7 +162,7 @@ func (dialector Dialector) QuoteTo(writer clause.Writer, str string) {
 }
 
 func (dialector Dialector) Explain(sql string, vars ...interface{}) string {
-	return logger.ExplainSQL(sql, nil, `"`, vars...)
+	return logger.ExplainSQL(sql, nil, `'`, vars...)
 }
 
 func (dialectopr Dialector) SavePoint(tx *gorm.DB, name string) error {
