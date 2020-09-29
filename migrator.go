@@ -51,7 +51,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 		tx := m.DB.Session(new(gorm.Session))
 		if err := m.RunWithValue(model, func(stmt *gorm.Statement) (err error) {
 			var (
-				createTableSQL = "CREATE TABLE ? (%s %s, %s) ENGINE=%s"
+				createTableSQL = "CREATE TABLE ? (%s %s %s) ENGINE=%s"
 				args           = []interface{}{clause.Table{Name: stmt.Table}}
 			)
 
@@ -77,6 +77,9 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				)
 			}
 			constrStr := strings.Join(constrSlice, ",")
+			if len(constrSlice) > 0 {
+				constrStr = ", " + constrStr
+			}
 
 			// Step 3. Build index SQL string
 			// NOTE: index class [UNIQUE | FULLTEXT | SPATIAL] is NOT supported!
@@ -90,7 +93,6 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 					}(model, index.Name)
 					continue
 				}
-
 				// TODO(iqdf): support primary key by put it as pass the fieldname
 				// as MergeTree(...) parameters. But somehow it complained.
 				// Note that primary key doesn't ensure uniqueness
@@ -114,10 +116,15 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				args = append(args, clause.Expr{SQL: index.Name}, indexOptions)
 			}
 			indexStr := strings.Join(indexSlice, ", ")
+			if len(indexSlice) > 0 {
+				indexStr = ", " + indexStr
+			}
 
 			// Step 4. Finally assemble CREATE TABLE ... SQL string
 			engineOpts := "MergeTree() ORDER BY tuple()"
 			createTableSQL = fmt.Sprintf(createTableSQL, columnStr, constrStr, indexStr, engineOpts)
+
+			fmt.Println("Exec Create Table:", createTableSQL)
 			err = tx.Exec(createTableSQL, args...).Error
 
 			return
