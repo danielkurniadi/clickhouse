@@ -86,7 +86,7 @@ type DefaultAndComment struct {
 
 // MyIndexedTable (`my_indexed_tables`) table demonstrate more complex indexing expression
 type MyIndexedStuff struct {
-	U64 uint64 `gorm:"index:a,expression:u64*i32,type:minmax,granularity:3"`
+	U64 uint64 `gorm:"index:a,expression:u64*i32,type:minmax,granularity:10"`
 	I32 int32  `gorm:"index:b,expression:u64*length(ss),type:set(1000),granularity:4"`
 	SS  string `gorm:"index"`
 }
