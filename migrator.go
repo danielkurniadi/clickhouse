@@ -150,6 +150,32 @@ func (m Migrator) HasTable(value interface{}) bool {
 
 // Columns
 
+func (m Migrator) AddColumn(value interface{}, field string) error {
+	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		if field := stmt.Schema.LookUpField(field); field != nil {
+			return m.DB.Exec(
+				"ALTER TABLE ? ADD COLUMN ? ?",
+				clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName},
+				m.FullDataTypeOf(field),
+			).Error
+		}
+		return fmt.Errorf("failed to look up field with name: %s", field)
+	})
+}
+
+func (m Migrator) DropColumn(value interface{}, name string) error {
+	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		if field := stmt.Schema.LookUpField(name); field != nil {
+			name = field.DBName
+		}
+		fmt.Println("ALTER TABLE ? DROP COLUMN")
+		return m.DB.Exec(
+			"ALTER TABLE ? DROP COLUMN ?",
+			clause.Table{Name: stmt.Table}, clause.Column{Name: name},
+		).Error
+	})
+}
+
 func (m Migrator) AlterColumn(value interface{}, field string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		if field := stmt.Schema.LookUpField(field); field != nil {
