@@ -275,25 +275,25 @@ func (m Migrator) BuildIndexOptions(opts []schema.IndexOption, stmt *gorm.Statem
 
 func (m Migrator) CreateIndex(value interface{}, name string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		if idx := stmt.Schema.LookIndex(name); idx != nil {
-			opts := m.BuildIndexOptions(idx.Fields, stmt)
+		if index := stmt.Schema.LookIndex(name); index != nil {
+			opts := m.BuildIndexOptions(index.Fields, stmt)
 			values := []interface{}{
 				clause.Table{Name: stmt.Table},
-				clause.Column{Name: idx.Name},
+				clause.Column{Name: index.Name},
 				opts,
 			}
 
 			// Get indexing type `gorm:"index,type:minmax"`
 			// Choice: minmax | set(n) | ngrambf_v1(n, size, hash, seed) | bloomfilter()
 			indexType := DefaultIndexType
-			if idx.Type != "" {
-				indexType = idx.Type
+			if index.Type != "" {
+				indexType = index.Type
 			}
 
 			// NOTE: concept of UNIQUE | FULLTEXT | SPATIAL index
 			// is NOT supported in clickhouse
-			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d"      // TODO(iqdf): how to inject Granularity
-			createIndexSQL = fmt.Sprintf(createIndexSQL, indexType, DefaultGranularity) // Granularity: 1 (default)
+			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d"                             // TODO(iqdf): how to inject Granularity
+			createIndexSQL = fmt.Sprintf(createIndexSQL, indexType, m.getIndexGranularityOption(index.Fields)) // Granularity: 1 (default)
 			return m.DB.Exec(createIndexSQL, values...).Error
 		}
 		return ErrCreateIndexFailed
