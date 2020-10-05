@@ -14,7 +14,8 @@ import (
 // Default values for any SQL options
 const (
 	DefaultGranularity     = 1        // 1 granule = 8192 rows
-	DefaultIndexType       = "minmax" // index stores extremes of the expression
+	DefaultIndexType       = "minmax" // default index stores extremes of the expression
+	DefaultCompression     = "LZ4"    // default compression algorithm. LZ4 is lossless
 	DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
 )
 
@@ -38,12 +39,14 @@ func (m Migrator) CurrentDatabase() (name string) {
 }
 
 func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
+	// Infer the ClickHouse datatype from schema.Field information
 	expr.SQL = m.Migrator.DataTypeOf(field)
 
+	// NOTE:
 	// NULL and UNIQUE keyword is not supported in clickhouse.
 	// Hence, skipping checks for field.Unique and field.NotNull
 
-	// Build DEFAULT clause after DataTypeOf() expression.
+	// Build DEFAULT clause after DataTypeOf() expression optionally
 	if field.HasDefaultValue && (field.DefaultValueInterface != nil || field.DefaultValue != "") {
 		if field.DefaultValueInterface != nil {
 			defaultStmt := &gorm.Statement{Vars: []interface{}{field.DefaultValueInterface}}
@@ -54,12 +57,26 @@ func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 		}
 	}
 
-	// Build COMMENT clause after DEFAULT
-	if value, ok := field.TagSettings["COMMENT"]; ok {
-		expr.SQL += " COMMENT " + m.Dialector.Explain("?", value)
+	// Build COMMENT clause optionally after DEFAULT
+	if comment, ok := field.TagSettings["COMMENT"]; ok {
+		expr.SQL += " COMMENT " + m.Dialector.Explain("?", comment)
 	}
 
-	// TODO (iqdf) build CODEC and TTL clause
+	// Build CODEC compression algorithm optionally
+	// NOTE: the codec algo name is case sensitive!
+	if codecstr, ok := field.TagSettings["CODEC"]; ok && codecstr != "" {
+		// parse codec one by one in the codec option
+		codecSlice := make([]string, 0, 10)
+		for _, codec := range strings.Split(codecstr, ",") {
+			codecSlice = append(codecSlice, codec)
+		}
+		codecArgsSQL := DefaultCompression
+		if len(codecSlice) > 0 {
+			codecArgsSQL = strings.Join(codecSlice, ",")
+		}
+		codecSQL := fmt.Sprintf(" CODEC(%s) ", codecArgsSQL)
+		expr.SQL += codecSQL
+	}
 
 	return expr
 }
