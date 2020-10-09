@@ -1,4 +1,4 @@
-# GORM MySQL Driver
+# GORM ClickHouse Driver
 
 ## Quick Start
 
