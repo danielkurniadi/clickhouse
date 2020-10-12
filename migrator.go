@@ -3,6 +3,7 @@ package clickhouse
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"gorm.io/gorm"
@@ -13,7 +14,8 @@ import (
 
 // Default values for any SQL options
 const (
-	DefaultGranularity     = 1        // 1 granule = 8192 rows
+	DefaultGranularity     = 3        // 1 granule = 8192 rows
+	DefaultCompression     = "LZ4"    // default compression algorithm. LZ4 is lossless
 	DefaultIndexType       = "minmax" // index stores extremes of the expression
 	DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
 )
@@ -38,12 +40,14 @@ func (m Migrator) CurrentDatabase() (name string) {
 }
 
 func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
+	// Infer the ClickHouse datatype from schema.Field information
 	expr.SQL = m.Migrator.DataTypeOf(field)
 
+	// NOTE:
 	// NULL and UNIQUE keyword is not supported in clickhouse.
 	// Hence, skipping checks for field.Unique and field.NotNull
 
-	// Build DEFAULT clause after DataTypeOf() expression.
+	// Build DEFAULT clause after DataTypeOf() expression optionally
 	if field.HasDefaultValue && (field.DefaultValueInterface != nil || field.DefaultValue != "") {
 		if field.DefaultValueInterface != nil {
 			defaultStmt := &gorm.Statement{Vars: []interface{}{field.DefaultValueInterface}}
@@ -54,12 +58,26 @@ func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 		}
 	}
 
-	// Build COMMENT clause after DEFAULT
-	if value, ok := field.TagSettings["COMMENT"]; ok {
-		expr.SQL += " COMMENT " + m.Dialector.Explain("?", value)
+	// Build COMMENT clause optionally after DEFAULT
+	if comment, ok := field.TagSettings["COMMENT"]; ok {
+		expr.SQL += " COMMENT " + m.Dialector.Explain("?", comment)
 	}
 
-	// TODO (iqdf) build CODEC and TTL clause
+	// Build CODEC compression algorithm optionally
+	// NOTE: the codec algo name is case sensitive!
+	if codecstr, ok := field.TagSettings["CODEC"]; ok && codecstr != "" {
+		// parse codec one by one in the codec option
+		codecSlice := make([]string, 0, 10)
+		for _, codec := range strings.Split(codecstr, ",") {
+			codecSlice = append(codecSlice, codec)
+		}
+		codecArgsSQL := DefaultCompression
+		if len(codecSlice) > 0 {
+			codecArgsSQL = strings.Join(codecSlice, ",")
+		}
+		codecSQL := fmt.Sprintf(" CODEC(%s) ", codecArgsSQL)
+		expr.SQL += codecSQL
+	}
 
 	return expr
 }
@@ -131,7 +149,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 
 				// Stringify index builder
 				// TODO (iqdf): support granularity
-				str := fmt.Sprintf("INDEX ? ? TYPE %s GRANULARITY %d", indexType, DefaultGranularity)
+				str := fmt.Sprintf("INDEX ? ? TYPE %s GRANULARITY %d", indexType, m.getIndexGranularityOption(index.Fields))
 				indexSlice = append(indexSlice, str)
 				args = append(args, clause.Expr{SQL: index.Name}, indexOptions)
 			}
@@ -178,10 +196,24 @@ func (m Migrator) AddColumn(value interface{}, field string) error {
 		if field := stmt.Schema.LookUpField(field); field != nil {
 			return m.DB.Exec(
 				"ALTER TABLE ? ADD COLUMN ? ?",
-				clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName}, m.DB.Migrator().FullDataTypeOf(field),
+				clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName},
+				m.FullDataTypeOf(field),
 			).Error
 		}
 		return fmt.Errorf("failed to look up field with name: %s", field)
+	})
+}
+
+func (m Migrator) DropColumn(value interface{}, name string) error {
+	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		if field := stmt.Schema.LookUpField(name); field != nil {
+			name = field.DBName
+		}
+		fmt.Println("ALTER TABLE ? DROP COLUMN")
+		return m.DB.Exec(
+			"ALTER TABLE ? DROP COLUMN ?",
+			clause.Table{Name: stmt.Table}, clause.Column{Name: name},
+		).Error
 	})
 }
 
@@ -260,25 +292,25 @@ func (m Migrator) BuildIndexOptions(opts []schema.IndexOption, stmt *gorm.Statem
 
 func (m Migrator) CreateIndex(value interface{}, name string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		if idx := stmt.Schema.LookIndex(name); idx != nil {
-			opts := m.BuildIndexOptions(idx.Fields, stmt)
+		if index := stmt.Schema.LookIndex(name); index != nil {
+			opts := m.BuildIndexOptions(index.Fields, stmt)
 			values := []interface{}{
 				clause.Table{Name: stmt.Table},
-				clause.Column{Name: idx.Name},
+				clause.Column{Name: index.Name},
 				opts,
 			}
 
 			// Get indexing type `gorm:"index,type:minmax"`
 			// Choice: minmax | set(n) | ngrambf_v1(n, size, hash, seed) | bloomfilter()
 			indexType := DefaultIndexType
-			if idx.Type != "" {
-				indexType = idx.Type
+			if index.Type != "" {
+				indexType = index.Type
 			}
 
 			// NOTE: concept of UNIQUE | FULLTEXT | SPATIAL index
 			// is NOT supported in clickhouse
-			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d"      // TODO(iqdf): how to inject Granularity
-			createIndexSQL = fmt.Sprintf(createIndexSQL, indexType, DefaultGranularity) // Granularity: 1 (default)
+			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d"                             // TODO(iqdf): how to inject Granularity
+			createIndexSQL = fmt.Sprintf(createIndexSQL, indexType, m.getIndexGranularityOption(index.Fields)) // Granularity: 1 (default)
 			return m.DB.Exec(createIndexSQL, values...).Error
 		}
 		return ErrCreateIndexFailed
@@ -302,4 +334,36 @@ func (m Migrator) DropIndex(value interface{}, name string) error {
 			clause.Table{Name: stmt.Table},
 			clause.Column{Name: name}).Error
 	})
+}
+
+// Helper
+
+// Index
+
+func (m Migrator) getIndexGranularityOption(opts []schema.IndexOption) int {
+	for _, indexOpt := range opts {
+		if settingStr, ok := indexOpt.Field.TagSettings["INDEX"]; ok {
+			// e.g. settingStr: "a,expression:u64*i32,type:minmax,granularity:3"
+			for _, str := range strings.Split(settingStr, ",") {
+				// e.g. str: "granularity:3"
+				keyVal := strings.Split(str, ":")
+				if len(keyVal) > 1 && strings.ToLower(keyVal[0]) == "granularity" {
+					if len(keyVal) < 2 {
+						// continue search for other setting which
+						// may contain granularity:<num>
+						continue
+					}
+					// try to convert <num> into an integer > 0
+					// if check fails, continue search for other
+					// settings which may contain granularity:<num>
+					num, err := strconv.Atoi(keyVal[1])
+					if err != nil || num < 0 {
+						continue
+					}
+					return num
+				}
+			}
+		}
+	}
+	return DefaultGranularity
 }
