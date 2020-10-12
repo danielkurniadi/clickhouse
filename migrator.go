@@ -3,6 +3,7 @@ package clickhouse
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"gorm.io/gorm"
@@ -13,9 +14,9 @@ import (
 
 // Default values for any SQL options
 const (
-	DefaultGranularity     = 1        // 1 granule = 8192 rows
-	DefaultIndexType       = "minmax" // default index stores extremes of the expression
+	DefaultGranularity     = 3        // 1 granule = 8192 rows
 	DefaultCompression     = "LZ4"    // default compression algorithm. LZ4 is lossless
+	DefaultIndexType       = "minmax" // index stores extremes of the expression
 	DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
 )
 
@@ -148,7 +149,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 
 				// Stringify index builder
 				// TODO (iqdf): support granularity
-				str := fmt.Sprintf("INDEX ? ? TYPE %s GRANULARITY %d", indexType, DefaultGranularity)
+				str := fmt.Sprintf("INDEX ? ? TYPE %s GRANULARITY %d", indexType, m.getIndexGranularityOption(index.Fields))
 				indexSlice = append(indexSlice, str)
 				args = append(args, clause.Expr{SQL: index.Name}, indexOptions)
 			}
@@ -291,25 +292,25 @@ func (m Migrator) BuildIndexOptions(opts []schema.IndexOption, stmt *gorm.Statem
 
 func (m Migrator) CreateIndex(value interface{}, name string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		if idx := stmt.Schema.LookIndex(name); idx != nil {
-			opts := m.BuildIndexOptions(idx.Fields, stmt)
+		if index := stmt.Schema.LookIndex(name); index != nil {
+			opts := m.BuildIndexOptions(index.Fields, stmt)
 			values := []interface{}{
 				clause.Table{Name: stmt.Table},
-				clause.Column{Name: idx.Name},
+				clause.Column{Name: index.Name},
 				opts,
 			}
 
 			// Get indexing type `gorm:"index,type:minmax"`
 			// Choice: minmax | set(n) | ngrambf_v1(n, size, hash, seed) | bloomfilter()
 			indexType := DefaultIndexType
-			if idx.Type != "" {
-				indexType = idx.Type
+			if index.Type != "" {
+				indexType = index.Type
 			}
 
 			// NOTE: concept of UNIQUE | FULLTEXT | SPATIAL index
 			// is NOT supported in clickhouse
-			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d"      // TODO(iqdf): how to inject Granularity
-			createIndexSQL = fmt.Sprintf(createIndexSQL, indexType, DefaultGranularity) // Granularity: 1 (default)
+			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d"                             // TODO(iqdf): how to inject Granularity
+			createIndexSQL = fmt.Sprintf(createIndexSQL, indexType, m.getIndexGranularityOption(index.Fields)) // Granularity: 1 (default)
 			return m.DB.Exec(createIndexSQL, values...).Error
 		}
 		return ErrCreateIndexFailed
@@ -333,4 +334,36 @@ func (m Migrator) DropIndex(value interface{}, name string) error {
 			clause.Table{Name: stmt.Table},
 			clause.Column{Name: name}).Error
 	})
+}
+
+// Helper
+
+// Index
+
+func (m Migrator) getIndexGranularityOption(opts []schema.IndexOption) int {
+	for _, indexOpt := range opts {
+		if settingStr, ok := indexOpt.Field.TagSettings["INDEX"]; ok {
+			// e.g. settingStr: "a,expression:u64*i32,type:minmax,granularity:3"
+			for _, str := range strings.Split(settingStr, ",") {
+				// e.g. str: "granularity:3"
+				keyVal := strings.Split(str, ":")
+				if len(keyVal) > 1 && strings.ToLower(keyVal[0]) == "granularity" {
+					if len(keyVal) < 2 {
+						// continue search for other setting which
+						// may contain granularity:<num>
+						continue
+					}
+					// try to convert <num> into an integer > 0
+					// if check fails, continue search for other
+					// settings which may contain granularity:<num>
+					num, err := strconv.Atoi(keyVal[1])
+					if err != nil || num < 0 {
+						continue
+					}
+					return num
+				}
+			}
+		}
+	}
+	return DefaultGranularity
 }
