@@ -22,13 +22,13 @@ jobs:
       clickhouse:
         image: ${{ matrix.dbversion }}
         env:
-          - CLICKHOUSE_DB=gorm
-          - CLICKHOUSE_USER=gorm
-          - CLICKHOUSE_PASSWORD=gorm
+          CLICKHOUSE_DB: gorm
+          CLICKHOUSE_USER: gorm
+          CLICKHOUSE_PASSWORD: gorm
         ports:
-          - "9941:8123"
-          - "9942:9000"
-          - "9943:9009"
+          - 9941:8123
+          - 9942:9000
+          - 9943:9009
 
     steps:
     - name: Set up Go 1.x

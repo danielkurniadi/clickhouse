@@ -2,6 +2,8 @@
 
 clickhouse support for GORM
 
+[![test status](https://github.com/go-gorm/clickhouse/workflows/tests/badge.svg?branch=master "test status")](https://github.com/go-gorm/clickhouse/actions)
+
 ## Quick Start
 
 You can simply test your connection to your database with the following:
