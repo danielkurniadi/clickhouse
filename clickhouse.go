@@ -53,6 +53,7 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 	if dialector.DriverName == "" {
 		dialector.DriverName = "clickhouse"
 	}
+
 	if dialector.Conn != nil {
 		db.ConnPool = dialector.Conn
 	} else {
@@ -61,6 +62,7 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 			return err
 		}
 	}
+
 	var vs string
 	err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&vs)
 	if err != nil {
@@ -165,11 +167,9 @@ func (dialector Dialector) Explain(sql string, vars ...interface{}) string {
 }
 
 func (dialectopr Dialector) SavePoint(tx *gorm.DB, name string) error {
-	tx.Exec("SAVEPOINT " + name)
-	return nil
+	return gorm.ErrUnsupportedDriver
 }
 
 func (dialectopr Dialector) RollbackTo(tx *gorm.DB, name string) error {
-	tx.Exec("ROLLBACK TO SAVEPOINT " + name)
-	return nil
+	return gorm.ErrUnsupportedDriver
 }

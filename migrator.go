@@ -262,8 +262,11 @@ func (m Migrator) HasColumn(value interface{}, field string) bool {
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		currentDatabase := m.DB.Migrator().CurrentDatabase()
 		name := field
-		if field := stmt.Schema.LookUpField(field); field != nil {
-			name = field.DBName
+
+		if stmt.Schema != nil {
+			if field := stmt.Schema.LookUpField(field); field != nil {
+				name = field.DBName
+			}
 		}
 
 		return m.DB.Raw(
@@ -324,8 +327,10 @@ func (m Migrator) RenameIndex(value interface{}, oldName, newName string) error 
 
 func (m Migrator) DropIndex(value interface{}, name string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		if idx := stmt.Schema.LookIndex(name); idx != nil {
-			name = idx.Name
+		if stmt.Schema != nil {
+			if idx := stmt.Schema.LookIndex(name); idx != nil {
+				name = idx.Name
+			}
 		}
 		dropIndexSQL := "ALTER TABLE ? DROP INDEX ?"
 		return m.DB.Exec(dropIndexSQL,
