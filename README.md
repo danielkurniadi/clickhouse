@@ -1,8 +1,11 @@
 # GORM ClickHouse Driver
 
+clickhouse support for GORM
+
 ## Quick Start
 
 You can simply test your connection to your database with the following:
+
 ```go
 import (
   "gorm.io/driver/clickhouse"
@@ -10,19 +13,20 @@ import (
 )
 
 func main() {
-  dsn := "tcp://localhost:9000?debug=true"
-  db, err := gorm.Open(sql.Open(dsn), &gorm.Config{})
+  dsn := "tcp://localhost:9000?database=gorm&username=gorm&password=gorm&read_timeout=10&write_timeout=20"
+  db, err := gorm.Open(clickhouse.Open(dsn), &gorm.Config{})
   if err != nil {
     panic(err)
   }
+
   // do something with db
+  db.Create(&user)
+  db.Find(&user, "id = ?", 10)
   // ...
 }
 ```
 
-
-## Configuration
-
+## Advanced Configuration
 
 ```go
 import (
@@ -31,20 +35,17 @@ import (
 )
 
 // refer to https://github.com/ClickHouse/clickhouse-go
-const DSN = "tcp://localhost:9000?username=default&password=password&read_timeout=10&write_timeout=20"
+var dsn = "tcp://localhost:9000?database=gorm&username=gorm&password=gorm&read_timeout=10&write_timeout=20"
 
 func main() {
-db, err := gorm.Open(clickhouse.New(mysql.Config{
-    DSN: DSN, 
+  db, err := gorm.Open(clickhouse.New(click.Config{
+    DSN: dsn,
+    Conn: conn,                       // initialize with existing database conn
     DisableDatetimePrecision: true,   // disable datetime64 precision, not supported before clickhouse 20.4
     DontSupportRenameColumn: true,    // rename column not supported before clickhouse 20.4
     SkipInitializeWithVersion: false, // smart configure based on used version
-}), &gorm.Config{})
+  }), &gorm.Config{})
+}
 ```
-
-## Customized Driver
-
-Customised driver is not supported. Currently there is only one driver that is tested against which is `"clickhouse"` driver from [ClickHouse/clickhouse-go](https://github.com/ClickHouse/clickhouse-go)
-
 
 Checkout [https://gorm.io](https://gorm.io) for details.
