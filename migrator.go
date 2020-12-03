@@ -165,7 +165,6 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 			}
 			createTableSQL = fmt.Sprintf(createTableSQL, columnStr, constrStr, indexStr, engineOpts)
 
-			fmt.Println("Exec Create Table:", createTableSQL)
 			err = tx.Exec(createTableSQL, args...).Error
 
 			return
@@ -209,7 +208,6 @@ func (m Migrator) DropColumn(value interface{}, name string) error {
 		if field := stmt.Schema.LookUpField(name); field != nil {
 			name = field.DBName
 		}
-		fmt.Println("ALTER TABLE ? DROP COLUMN")
 		return m.DB.Exec(
 			"ALTER TABLE ? DROP COLUMN ?",
 			clause.Table{Name: stmt.Table}, clause.Column{Name: name},
