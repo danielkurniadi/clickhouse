@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	_ "github.com/ClickHouse/clickhouse-go"
 	"github.com/hashicorp/go-version"
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
@@ -13,8 +14,6 @@ import (
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
-
-	_ "github.com/ClickHouse/clickhouse-go"
 )
 
 type Config struct {

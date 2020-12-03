@@ -91,20 +91,9 @@ type MyIndexedStuff struct {
 	SS  string `gorm:"index"`
 }
 
-const DSNf = "tcp://%s:%s?database=%s&username=%s&password=%s&read_timeout=10&write_timeout=20&debug=%t"
-
 func main() {
-	var (
-		Host  = "localhost"
-		Port  = "9000"
-		Debug = true
+	var dsn = "tcp://localhost:9942?database=gorm&username=gorm&password=gorm&read_timeout=10&write_timeout=20"
 
-		DBName    = "testdb"
-		DBUser    = "default"
-		DBPasword = ""
-	)
-
-	dsn := fmt.Sprintf(DSNf, Host, Port, DBName, DBUser, DBPasword, Debug)
 	conn, err := gorm.Open(clickhouse.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
