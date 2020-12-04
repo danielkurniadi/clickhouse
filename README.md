@@ -24,6 +24,9 @@ func main() {
   // do something with db
   db.Create(&user)
   db.Find(&user, "id = ?", 10)
+
+  var users = []User{user1, user2, user3}
+  db.Create(&users)
   // ...
 }
 ```

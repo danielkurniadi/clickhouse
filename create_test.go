@@ -7,7 +7,7 @@ import (
 )
 
 func TestCreate(t *testing.T) {
-	var user = User{Name: "create", FirstName: "zhang", LastName: "jinzhu", Age: 18}
+	var user = User{ID: 1, Name: "create", FirstName: "zhang", LastName: "jinzhu", Age: 18}
 
 	if err := DB.Create(&user).Error; err != nil {
 		t.Fatalf("failed to create user, got error %v", err)
@@ -19,4 +19,29 @@ func TestCreate(t *testing.T) {
 	}
 
 	tests.AssertEqual(t, result, user)
+}
+
+func TestBatchCreate(t *testing.T) {
+	var users = []User{
+		{ID: 11, Name: "batch_create_1", FirstName: "zhang", LastName: "jinzhu", Age: 18},
+		{ID: 12, Name: "batch_create_2", FirstName: "zhang", LastName: "jinzhu", Age: 18},
+		{ID: 13, Name: "batch_create_3", FirstName: "zhang", LastName: "jinzhu", Age: 18},
+		{ID: 14, Name: "batch_create_4", FirstName: "zhang", LastName: "jinzhu", Age: 18},
+	}
+
+	if err := DB.Create(&users).Error; err != nil {
+		t.Fatalf("failed to create users, got error %v", err)
+	}
+
+	var results []User
+	DB.Find(&results)
+
+	for _, u := range users {
+		var result User
+		if err := DB.Find(&result, u.ID).Error; err != nil {
+			t.Fatalf("failed to query user, got error %v", err)
+		}
+
+		tests.AssertEqual(t, result, u)
+	}
 }

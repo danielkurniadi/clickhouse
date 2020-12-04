@@ -7,3 +7,5 @@ require (
 	github.com/hashicorp/go-version v1.2.1
 	gorm.io/gorm v1.20.8
 )
+
+replace github.com/ClickHouse/clickhouse-go => github.com/go-gorm/clickhouse-go v1.4.4

@@ -22,7 +22,7 @@ type Config struct {
 	Conn                      gorm.ConnPool
 	DisableDatetimePrecision  bool
 	DontSupportRenameColumn   bool
-	AutoInitializeWithVersion bool
+	SkipInitializeWithVersion bool
 }
 
 type Dialector struct {
@@ -45,9 +45,8 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 	// register callbacks
 	ctx := context.Background()
 	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
-	db.Callback().
-		Update().
-		Replace("gorm:update", func(db *gorm.DB) { return }) // TODO (iqdf) Replace func
+	db.Callback().Create().Replace("gorm:create", Create)
+	db.Callback().Update().Replace("gorm:update", func(db *gorm.DB) { return }) // TODO (iqdf) Replace func
 
 	// assign option fields to default values
 	if dialector.DriverName == "" {
@@ -63,16 +62,18 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		}
 	}
 
-	var vs string
-	err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&vs)
-	if err != nil {
-		return err
-	}
-	dbversion, _ := version.NewVersion(vs)
-	versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
+	if !dialector.SkipInitializeWithVersion {
+		var vs string
+		err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&vs)
+		if err != nil {
+			return err
+		}
+		dbversion, _ := version.NewVersion(vs)
+		versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
 
-	if versionNoRenameColumn.Check(dbversion) {
-		dialector.Config.DontSupportRenameColumn = true
+		if versionNoRenameColumn.Check(dbversion) {
+			dialector.Config.DontSupportRenameColumn = true
+		}
 	}
 	return
 }
