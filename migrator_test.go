@@ -11,6 +11,8 @@ type User struct {
 	FirstName string
 	LastName  string
 	Age       int64
+	Active    bool
+	Salary    float32
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -19,12 +21,12 @@ func TestAutoMigrate(t *testing.T) {
 	type UserMigrateColumn struct {
 		ID       uint
 		Name     string
-		Salary   float64
+		IsAdmin  bool
 		Birthday time.Time `gorm:"precision:4"`
 	}
 
-	if DB.Migrator().HasColumn("users", "salary") {
-		t.Fatalf("users's salary column should not exists")
+	if DB.Migrator().HasColumn("users", "is_admin") {
+		t.Fatalf("users's is_admin column should not exists")
 	}
 
 	if err := DB.Table("users").AutoMigrate(&UserMigrateColumn{}); err != nil {
@@ -35,7 +37,7 @@ func TestAutoMigrate(t *testing.T) {
 		t.Fatalf("users should exists")
 	}
 
-	if !DB.Migrator().HasColumn("users", "salary") {
-		t.Fatalf("users's salary column should exists after auto migrate")
+	if !DB.Migrator().HasColumn("users", "is_admin") {
+		t.Fatalf("users's is_admin column should exists after auto migrate")
 	}
 }

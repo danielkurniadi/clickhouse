@@ -93,7 +93,7 @@ func (dialector Dialector) Migrator(db *gorm.DB) gorm.Migrator {
 func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 	switch field.DataType {
 	case schema.Bool:
-		return "boolean"
+		return "UInt8"
 	case schema.Int, schema.Uint:
 		sqlType := "Int64"
 		switch {
@@ -136,6 +136,7 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		}
 		return "DateTime64" + precision
 	}
+
 	return string(field.DataType)
 }
 
