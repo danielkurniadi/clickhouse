@@ -23,6 +23,10 @@ type Config struct {
 	DisableDatetimePrecision  bool
 	DontSupportRenameColumn   bool
 	SkipInitializeWithVersion bool
+	DefaultGranularity        int    // 1 granule = 8192 rows
+	DefaultCompression        string // default compression algorithm. LZ4 is lossless
+	DefaultIndexType          string // index stores extremes of the expression
+	DefaultTableEngineOpts    string
 }
 
 type Dialector struct {
@@ -51,6 +55,23 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 	// assign option fields to default values
 	if dialector.DriverName == "" {
 		dialector.DriverName = "clickhouse"
+	}
+
+	// default settings
+	if dialector.Config.DefaultGranularity == 0 {
+		dialector.Config.DefaultGranularity = 3
+	}
+
+	if dialector.Config.DefaultCompression == "" {
+		dialector.Config.DefaultCompression = "LZ4"
+	}
+
+	if dialector.DefaultIndexType == "" {
+		dialector.DefaultIndexType = "minmax"
+	}
+
+	if dialector.DefaultTableEngineOpts == "" {
+		dialector.DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
 	}
 
 	if dialector.Conn != nil {

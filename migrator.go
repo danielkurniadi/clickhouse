@@ -12,14 +12,6 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-// Default values for any SQL options
-const (
-	DefaultGranularity     = 3        // 1 granule = 8192 rows
-	DefaultCompression     = "LZ4"    // default compression algorithm. LZ4 is lossless
-	DefaultIndexType       = "minmax" // index stores extremes of the expression
-	DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
-)
-
 // Errors enumeration
 var (
 	ErrRenameColumnUnsupported = errors.New("renaming column is not supported in your clickhouse version < 20.4.")
@@ -71,7 +63,7 @@ func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 		for _, codec := range strings.Split(codecstr, ",") {
 			codecSlice = append(codecSlice, codec)
 		}
-		codecArgsSQL := DefaultCompression
+		codecArgsSQL := m.Dialector.DefaultCompression
 		if len(codecSlice) > 0 {
 			codecArgsSQL = strings.Join(codecSlice, ",")
 		}
@@ -137,7 +129,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 
 				// Get indexing type `gorm:"index,type:minmax"`
 				// Choice: minmax | set(n) | ngrambf_v1(n, size, hash, seed) | bloomfilter()
-				indexType := DefaultIndexType
+				indexType := m.Dialector.DefaultIndexType
 				if index.Type != "" {
 					indexType = index.Type
 				}
@@ -159,7 +151,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 			}
 
 			// Step 4. Finally assemble CREATE TABLE ... SQL string
-			engineOpts := DefaultTableEngineOpts
+			engineOpts := m.Dialector.DefaultTableEngineOpts
 			if tableOption, ok := m.DB.Get("gorm:table_options"); ok {
 				engineOpts = fmt.Sprint(tableOption)
 			}
@@ -303,7 +295,7 @@ func (m Migrator) CreateIndex(value interface{}, name string) error {
 
 			// Get indexing type `gorm:"index,type:minmax"`
 			// Choice: minmax | set(n) | ngrambf_v1(n, size, hash, seed) | bloomfilter()
-			indexType := DefaultIndexType
+			indexType := m.Dialector.DefaultIndexType
 			if index.Type != "" {
 				indexType = index.Type
 			}
@@ -368,5 +360,5 @@ func (m Migrator) getIndexGranularityOption(opts []schema.IndexOption) int {
 			}
 		}
 	}
-	return DefaultGranularity
+	return m.Dialector.DefaultGranularity
 }
