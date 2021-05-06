@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 
 	_ "github.com/ClickHouse/clickhouse-go"
@@ -48,7 +49,9 @@ func (dialector Dialector) Name() string {
 func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 	// register callbacks
 	ctx := context.Background()
-	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
+	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{
+		DeleteClauses: []string{"DELETE", "WHERE"},
+	})
 	db.Callback().Create().Replace("gorm:create", Create)
 	db.Callback().Update().Replace("gorm:update", func(db *gorm.DB) { return }) // TODO (iqdf) Replace func
 
@@ -96,7 +99,70 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 			dialector.Config.DontSupportRenameColumn = true
 		}
 	}
+
+	for k, v := range dialector.ClauseBuilders() {
+		db.ClauseBuilders[k] = v
+	}
 	return
+}
+
+func modifyStatementWhereConds(stmt *gorm.Statement) {
+	if c, ok := stmt.Clauses["WHERE"]; ok {
+		if where, ok := c.Expression.(clause.Where); ok {
+			modifyExprs(where.Exprs)
+		}
+	}
+}
+
+func modifyExprs(exprs []clause.Expression) {
+	for idx, expr := range exprs {
+		switch v := expr.(type) {
+		case clause.AndConditions:
+			modifyExprs(v.Exprs)
+		case clause.NotConditions:
+			modifyExprs(v.Exprs)
+		case clause.OrConditions:
+			modifyExprs(v.Exprs)
+		default:
+			reflectValue := reflect.ValueOf(expr)
+			if reflectValue.Kind() == reflect.Struct {
+				if field := reflectValue.FieldByName("Column"); !field.IsZero() {
+					if column, ok := field.Interface().(clause.Column); ok {
+						column.Table = ""
+						result := reflect.New(reflectValue.Type()).Elem()
+						result.Set(reflectValue)
+						result.FieldByName("Column").Set(reflect.ValueOf(column))
+						exprs[idx] = result.Interface().(clause.Expression)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
+	clauseBuilders := map[string]clause.ClauseBuilder{
+		"DELETE": func(c clause.Clause, builder clause.Builder) {
+			builder.WriteString("ALTER TABLE ")
+
+			var addedTable bool
+			if stmt, ok := builder.(*gorm.Statement); ok {
+				if c, ok := stmt.Clauses["FROM"]; ok {
+					addedTable = true
+					c.Name = ""
+					c.Build(builder)
+				}
+				modifyStatementWhereConds(stmt)
+			}
+
+			if !addedTable {
+				builder.WriteQuoted(clause.Table{Name: clause.CurrentTable})
+			}
+			builder.WriteString(" DELETE")
+		},
+	}
+
+	return clauseBuilders
 }
 
 func (dialector Dialector) Migrator(db *gorm.DB) gorm.Migrator {
