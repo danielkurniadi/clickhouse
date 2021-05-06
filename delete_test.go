@@ -25,8 +25,7 @@ func TestDelete(t *testing.T) {
 		t.Fatalf("failed to delete user, got error %v", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
+	time.Sleep(200 * time.Millisecond)
 	if err := DB.First(&result, user.ID).Error; err == nil {
 		t.Fatalf("should raise ErrRecordNotFound, got error %v", err)
 	}

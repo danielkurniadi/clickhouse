@@ -53,7 +53,6 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		DeleteClauses: []string{"DELETE", "WHERE"},
 	})
 	db.Callback().Create().Replace("gorm:create", Create)
-	db.Callback().Update().Replace("gorm:update", func(db *gorm.DB) { return }) // TODO (iqdf) Replace func
 
 	// assign option fields to default values
 	if dialector.DriverName == "" {
@@ -159,6 +158,28 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 				builder.WriteQuoted(clause.Table{Name: clause.CurrentTable})
 			}
 			builder.WriteString(" DELETE")
+		},
+		"UPDATE": func(c clause.Clause, builder clause.Builder) {
+			builder.WriteString("ALTER TABLE ")
+
+			var addedTable bool
+			if stmt, ok := builder.(*gorm.Statement); ok {
+				if c, ok := stmt.Clauses["FROM"]; ok {
+					addedTable = true
+					c.Name = ""
+					c.Build(builder)
+				}
+				modifyStatementWhereConds(stmt)
+			}
+
+			if !addedTable {
+				builder.WriteQuoted(clause.Table{Name: clause.CurrentTable})
+			}
+			builder.WriteString(" UPDATE")
+		},
+		"SET": func(c clause.Clause, builder clause.Builder) {
+			c.Name = ""
+			c.Build(builder)
 		},
 	}
 
