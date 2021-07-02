@@ -45,3 +45,22 @@ func TestBatchCreate(t *testing.T) {
 		tests.AssertEqual(t, result, u)
 	}
 }
+
+func TestCreateWithMap(t *testing.T) {
+	var user = User{ID: 122, Name: "create2", FirstName: "zhang", LastName: "jinzhu", Age: 18, Active: true, Salary: 6.6666}
+
+	if err := DB.Table("users").Create(&map[string]interface{}{
+		"id": user.ID, "name": user.Name, "first_name": user.FirstName, "last_name": user.LastName, "age": user.Age, "active": user.Active, "salary": user.Salary,
+	}).Error; err != nil {
+		t.Fatalf("failed to create user, got error %v", err)
+	}
+
+	var result User
+	if err := DB.Find(&result, user.ID).Error; err != nil {
+		t.Fatalf("failed to query user, got error %v", err)
+	}
+
+	user.CreatedAt = result.CreatedAt
+	user.UpdatedAt = result.UpdatedAt
+	tests.AssertEqual(t, result, user)
+}

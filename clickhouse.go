@@ -125,7 +125,7 @@ func modifyExprs(exprs []clause.Expression) {
 		default:
 			reflectValue := reflect.ValueOf(expr)
 			if reflectValue.Kind() == reflect.Struct {
-				if field := reflectValue.FieldByName("Column"); !field.IsZero() {
+				if field := reflectValue.FieldByName("Column"); field.IsValid() && !field.IsZero() {
 					if column, ok := field.Interface().(clause.Column); ok {
 						column.Table = ""
 						result := reflect.New(reflectValue.Type()).Elem()
