@@ -81,7 +81,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 		tx := m.DB.Session(new(gorm.Session))
 		if err := m.RunWithValue(model, func(stmt *gorm.Statement) (err error) {
 			var (
-				createTableSQL = "CREATE TABLE ? (%s %s %s) %s"
+				createTableSQL = "CREATE TABLE ? %s (%s %s %s) %s"
 				args           = []interface{}{clause.Table{Name: stmt.Table}}
 			)
 
@@ -155,7 +155,12 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 			if tableOption, ok := m.DB.Get("gorm:table_options"); ok {
 				engineOpts = fmt.Sprint(tableOption)
 			}
-			createTableSQL = fmt.Sprintf(createTableSQL, columnStr, constrStr, indexStr, engineOpts)
+			clusterOpts := ""
+			if clusterOption, ok := m.DB.Get("gorm:table_cluster_options"); ok {
+				clusterOpts = fmt.Sprint(clusterOption)
+			}
+
+			createTableSQL = fmt.Sprintf(createTableSQL, clusterOpts, columnStr, constrStr, indexStr, engineOpts)
 
 			err = tx.Exec(createTableSQL, args...).Error
 

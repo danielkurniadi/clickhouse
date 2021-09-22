@@ -32,6 +32,9 @@ func main() {
 	// Set table options
 	db.Set("gorm:table_options", "ENGINE=Distributed(cluster, default, hits)").AutoMigrate(&User{})
 
+  // Set table cluster options
+	//db.Set("gorm:table_cluster_options", "on cluster default").AutoMigrate(&User{})
+
 	// Insert
 	db.Create(&User{Name: "Angeliz", Age: 18})
 
