@@ -1,6 +1,7 @@
 package clickhouse
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -279,6 +280,70 @@ func (m Migrator) HasColumn(value interface{}, field string) bool {
 	})
 
 	return count > 0
+}
+
+// ColumnTypes return columnTypes []gorm.ColumnType and execErr error
+func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
+	columnTypes := make([]gorm.ColumnType, 0)
+	execErr := m.RunWithValue(value, func(stmt *gorm.Statement) (err error) {
+		rows, err := m.DB.Session(&gorm.Session{}).Table(stmt.Table).Limit(1).Rows()
+		if err != nil {
+			return err
+		}
+
+		defer func() {
+			err = rows.Close()
+		}()
+
+		var rawColumnTypes []*sql.ColumnType
+		rawColumnTypes, err = rows.ColumnTypes()
+
+		columnTypeSQL := "SELECT name, type, default_expression, comment, is_in_primary_key, character_octet_length, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision FROM system.columns WHERE database = ? AND table = ?"
+		columns, rowErr := m.DB.Raw(columnTypeSQL, m.CurrentDatabase(), stmt.Table).Rows()
+		if rowErr != nil {
+			return rowErr
+		}
+
+		defer columns.Close()
+
+		for columns.Next() {
+			var (
+				column            migrator.ColumnType
+				datetimePrecision sql.NullInt64
+				radixValue        sql.NullInt64
+				values            = []interface{}{
+					&column.NameValue, &column.DataTypeValue, &column.DefaultValueValue, &column.CommentValue, &column.PrimayKeyValue, &column.LengthValue, &column.DecimalSizeValue, &radixValue, &column.ScaleValue, &datetimePrecision,
+				}
+			)
+
+			if scanErr := columns.Scan(values...); scanErr != nil {
+				return scanErr
+			}
+
+			column.ColumnTypeValue = column.DataTypeValue
+
+			if datetimePrecision.Valid {
+				column.DecimalSizeValue = datetimePrecision
+			}
+
+			if column.DefaultValueValue.Valid {
+				column.DefaultValueValue.String = strings.Trim(column.DefaultValueValue.String, "'")
+			}
+
+			for _, c := range rawColumnTypes {
+				if c.Name() == column.NameValue.String {
+					column.SQLColumnType = c
+					break
+				}
+			}
+
+			columnTypes = append(columnTypes, column)
+		}
+
+		return
+	})
+
+	return columnTypes, execErr
 }
 
 // Indexes
