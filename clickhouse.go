@@ -91,11 +91,12 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		if err != nil {
 			return err
 		}
-		dbversion, _ := version.NewVersion(vs)
-		versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
+		if dbversion, err := version.NewVersion(vs); err == nil {
+			versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
 
-		if versionNoRenameColumn.Check(dbversion) {
-			dialector.Config.DontSupportRenameColumn = true
+			if versionNoRenameColumn.Check(dbversion) {
+				dialector.Config.DontSupportRenameColumn = true
+			}
 		}
 	}
 
