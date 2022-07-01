@@ -6,7 +6,7 @@ import (
 )
 
 type User struct {
-	ID        uint `gorm:"primaryKey"`
+	ID        uint64 `gorm:"primaryKey"`
 	Name      string
 	FirstName string
 	LastName  string
@@ -19,7 +19,7 @@ type User struct {
 
 func TestAutoMigrate(t *testing.T) {
 	type UserMigrateColumn struct {
-		ID           uint
+		ID           uint64
 		Name         string
 		IsAdmin      bool
 		Birthday     time.Time `gorm:"precision:4"`
@@ -33,7 +33,7 @@ func TestAutoMigrate(t *testing.T) {
 	}
 
 	if err := DB.Table("users").AutoMigrate(&UserMigrateColumn{}); err != nil {
-		t.Fatalf("no error should happen when auto migrate")
+		t.Fatalf("no error should happen when auto migrate, but got %v", err)
 	}
 
 	if !DB.Migrator().HasTable("users") {
@@ -90,7 +90,7 @@ func TestMigrator_HasIndex(t *testing.T) {
 	}
 
 	if err := DB.Table("users").AutoMigrate(&UserWithIndex{}); err != nil {
-		t.Fatalf("no error should happen when auto migrate")
+		t.Fatalf("no error should happen when auto migrate, but got %v", err)
 	}
 
 	if !DB.Migrator().HasIndex("users", "full_name") {

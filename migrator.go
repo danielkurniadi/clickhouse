@@ -293,7 +293,9 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 		}
 
 		defer func() {
-			err = rows.Close()
+			if err == nil {
+				err = rows.Close()
+			}
 		}()
 
 		var rawColumnTypes []*sql.ColumnType
@@ -310,10 +312,13 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 		for columns.Next() {
 			var (
 				column            migrator.ColumnType
-				datetimePrecision sql.NullInt64
-				radixValue        sql.NullInt64
+				decimalSizeValue  *uint64
+				datetimePrecision *uint64
+				radixValue        *uint64
+				scaleValue        *uint64
+				lengthValue       *uint64
 				values            = []interface{}{
-					&column.NameValue, &column.DataTypeValue, &column.DefaultValueValue, &column.CommentValue, &column.PrimaryKeyValue, &column.LengthValue, &column.DecimalSizeValue, &radixValue, &column.ScaleValue, &datetimePrecision,
+					&column.NameValue, &column.DataTypeValue, &column.DefaultValueValue, &column.CommentValue, &column.PrimaryKeyValue, &lengthValue, &decimalSizeValue, &radixValue, &scaleValue, &datetimePrecision,
 				}
 			)
 
@@ -323,8 +328,22 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 
 			column.ColumnTypeValue = column.DataTypeValue
 
-			if datetimePrecision.Valid {
-				column.DecimalSizeValue = datetimePrecision
+			if decimalSizeValue != nil {
+				column.DecimalSizeValue.Int64 = int64(*decimalSizeValue)
+				column.DecimalSizeValue.Valid = true
+			} else if datetimePrecision != nil {
+				column.DecimalSizeValue.Int64 = int64(*datetimePrecision)
+				column.DecimalSizeValue.Valid = true
+			}
+
+			if scaleValue != nil {
+				column.ScaleValue.Int64 = int64(*scaleValue)
+				column.ScaleValue.Valid = true
+			}
+
+			if lengthValue != nil {
+				column.LengthValue.Int64 = int64(*lengthValue)
+				column.LengthValue.Valid = true
 			}
 
 			if column.DefaultValueValue.Valid {
