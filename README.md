@@ -22,11 +22,12 @@ type User struct {
 }
 
 func main() {
-	dsn := "tcp://localhost:9000?database=gorm&username=gorm&password=gorm&read_timeout=10&write_timeout=20"
+	dsn := "clickhouse://gorm:gorm@localhost:9942/gorm?read_timeout=10s&write_timeout=20s"
 	db, err := gorm.Open(clickhouse.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic("failed to connect database")
 	}
+
 	// Auto Migrate
 	db.AutoMigrate(&User{})
 	// Set table options
@@ -62,8 +63,43 @@ import (
   "gorm.io/gorm"
 )
 
+sqlDB, err := clickhouse.OpenDB(&clickhouse.Options{
+	Addr: []string{"127.0.0.1:9999"},
+	Auth: clickhouse.Auth{
+		Database: "default",
+		Username: "default",
+		Password: "",
+	},
+	TLS: &tls.Config{
+		InsecureSkipVerify: true,
+	},
+	Settings: clickhouse.Settings{
+		"max_execution_time": 60,
+	},
+	DialTimeout: 5 * time.Second,
+	Compression: &clickhouse.Compression{
+		clickhouse.CompressionLZ4,
+	},
+	Debug: true,
+})
+
+func main() {
+  db, err := gorm.Open(clickhouse.New(click.Config{
+    Conn: sqlDB, // initialize with existing database conn
+  })
+}
+```
+
+```go
+package main
+
+import (
+  "gorm.io/driver/clickhouse"
+  "gorm.io/gorm"
+)
+
 // refer to https://github.com/ClickHouse/clickhouse-go
-var dsn = "tcp://localhost:9000?database=gorm&username=gorm&password=gorm&read_timeout=10&write_timeout=20"
+var dsn = "clickhouse://username:password@host1:9000,host2:9000/database?dial_timeout=200ms&max_execution_time=60"
 
 func main() {
   db, err := gorm.Open(clickhouse.New(click.Config{
