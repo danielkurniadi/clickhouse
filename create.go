@@ -18,7 +18,7 @@ func Create(db *gorm.DB) {
 			db.Statement.SQL.Grow(180)
 			db.Statement.AddClauseIfNotExists(clause.Insert{})
 
-			if values := callbacks.ConvertToCreateValues(db.Statement); len(values.Values) > 1 {
+			if values := callbacks.ConvertToCreateValues(db.Statement); len(values.Values) >= 1 {
 				prepareValues := clause.Values{
 					Columns: values.Columns,
 					Values:  [][]interface{}{values.Values[0]},
@@ -38,9 +38,6 @@ func Create(db *gorm.DB) {
 					}
 				}
 				return
-			} else {
-				db.Statement.AddClause(values)
-				db.Statement.Build("INSERT", "VALUES", "ON CONFLICT")
 			}
 		}
 

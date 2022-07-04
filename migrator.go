@@ -16,7 +16,7 @@ import (
 
 // Errors enumeration
 var (
-	ErrRenameColumnUnsupported = errors.New("renaming column is not supported in your clickhouse version < 20.4.")
+	ErrRenameColumnUnsupported = errors.New("renaming column is not supported in your clickhouse version < 20.4")
 	ErrRenameIndexUnsupported  = errors.New("renaming index is not supported")
 	ErrCreateIndexFailed       = errors.New("failed to create index with name")
 )
@@ -66,10 +66,7 @@ func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 	// NOTE: the codec algo name is case sensitive!
 	if codecstr, ok := field.TagSettings["CODEC"]; ok && codecstr != "" {
 		// parse codec one by one in the codec option
-		codecSlice := make([]string, 0, 10)
-		for _, codec := range strings.Split(codecstr, ",") {
-			codecSlice = append(codecSlice, codec)
-		}
+		codecSlice := strings.Split(codecstr, ",")
 		codecArgsSQL := m.Dialector.DefaultCompression
 		if len(codecSlice) > 0 {
 			codecArgsSQL = strings.Join(codecSlice, ",")
@@ -302,6 +299,9 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 		rawColumnTypes, err = rows.ColumnTypes()
 
 		columnTypeSQL := "SELECT name, type, default_expression, comment, is_in_primary_key, character_octet_length, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision FROM system.columns WHERE database = ? AND table = ?"
+		if m.Dialector.DontSupportColumnPrecision {
+			columnTypeSQL = "SELECT name, type, default_expression, comment, is_in_primary_key FROM system.columns WHERE database = ? AND table = ?"
+		}
 		columns, rowErr := m.DB.Raw(columnTypeSQL, m.CurrentDatabase(), stmt.Table).Rows()
 		if rowErr != nil {
 			return rowErr
@@ -321,6 +321,10 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 					&column.NameValue, &column.DataTypeValue, &column.DefaultValueValue, &column.CommentValue, &column.PrimaryKeyValue, &lengthValue, &decimalSizeValue, &radixValue, &scaleValue, &datetimePrecision,
 				}
 			)
+
+			if m.Dialector.DontSupportColumnPrecision {
+				values = []interface{}{&column.NameValue, &column.DataTypeValue, &column.DefaultValueValue, &column.CommentValue, &column.PrimaryKeyValue}
+			}
 
 			if scanErr := columns.Scan(values...); scanErr != nil {
 				return scanErr

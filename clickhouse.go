@@ -18,20 +18,22 @@ import (
 )
 
 type Config struct {
-	DriverName                string
-	DSN                       string
-	Conn                      gorm.ConnPool
-	DisableDatetimePrecision  bool
-	DontSupportRenameColumn   bool
-	SkipInitializeWithVersion bool
-	DefaultGranularity        int    // 1 granule = 8192 rows
-	DefaultCompression        string // default compression algorithm. LZ4 is lossless
-	DefaultIndexType          string // index stores extremes of the expression
-	DefaultTableEngineOpts    string
+	DriverName                 string
+	DSN                        string
+	Conn                       gorm.ConnPool
+	DisableDatetimePrecision   bool
+	DontSupportRenameColumn    bool
+	DontSupportColumnPrecision bool
+	SkipInitializeWithVersion  bool
+	DefaultGranularity         int    // 1 granule = 8192 rows
+	DefaultCompression         string // default compression algorithm. LZ4 is lossless
+	DefaultIndexType           string // index stores extremes of the expression
+	DefaultTableEngineOpts     string
 }
 
 type Dialector struct {
 	*Config
+	Version string
 }
 
 func Open(dsn string) gorm.Dialector {
@@ -86,16 +88,20 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 	}
 
 	if !dialector.SkipInitializeWithVersion {
-		var vs string
-		err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&vs)
+		err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&dialector.Version)
 		if err != nil {
 			return err
 		}
-		if dbversion, err := version.NewVersion(vs); err == nil {
+		if dbversion, err := version.NewVersion(dialector.Version); err == nil {
 			versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
 
 			if versionNoRenameColumn.Check(dbversion) {
 				dialector.Config.DontSupportRenameColumn = true
+			}
+
+			versionNoPrecisionColumn, _ := version.NewConstraint("< 21.11")
+			if versionNoPrecisionColumn.Check(dbversion) {
+				dialector.DontSupportColumnPrecision = true
 			}
 		}
 	}

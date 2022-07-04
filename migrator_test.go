@@ -68,11 +68,11 @@ func TestAutoMigrate(t *testing.T) {
 				t.Fatalf("column name default_value should be correct, name: %v, column: %#v", columnType.Name(), columnType)
 			}
 		case "debit":
-			if decimal, scale, ok := columnType.DecimalSize(); !ok || scale != 0 || decimal != 4 {
+			if decimal, scale, ok := columnType.DecimalSize(); !ok || (scale != 0 || decimal != 4) {
 				t.Fatalf("column name debit should be correct, name: %v, column: %#v", columnType.Name(), columnType)
 			}
 		case "birthday":
-			if decimal, scale, ok := columnType.DecimalSize(); !ok || scale != 0 || decimal != 4 {
+			if decimal, scale, ok := columnType.DecimalSize(); !ok || (scale != 0 || decimal != 4) {
 				t.Fatalf("column name birthday should be correct, name: %v, column: %#v", columnType.Name(), columnType)
 			}
 		}
