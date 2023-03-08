@@ -15,7 +15,7 @@ var DB *gorm.DB
 func init() {
 	var (
 		err   error
-		dbDSN = "clickhouse://gorm:gorm@localhost:9942/gorm?read_timeout=10s&write_timeout=20s"
+		dbDSN = "clickhouse://gorm:gorm@localhost:9942/gorm?dial_timeout=10s&read_timeout=20s"
 	)
 
 	if DB, err = gorm.Open(clickhouse.Open(dbDSN), &gorm.Config{}); err != nil {
